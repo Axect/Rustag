@@ -10,7 +10,8 @@ Rustag is a Rust-based command-line tool for organizing and tagging files on you
 
 ## Installation
 
-To install Rustag, ensure you have Rust and Cargo installed on your system. Clone the repository and build the project:
+To install Rustag, ensure you have Rust and Cargo installed on your system.
+Then run the following command:
 
 ```bash
 cargo install rustag
