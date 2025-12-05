@@ -5,8 +5,7 @@ Rustag is a Rust-based command-line tool for bookmarking directories on your sys
 ## Features
 
 - **Directory Bookmarking**: Assign custom aliases to your directories for easy organization.
-- **Fuzzy Search**: Easily find your bookmarks using a fuzzy search interface.
-- **Table Display**: View all bookmarks in a clean table format showing aliases and paths.
+- **Fuzzy Search**: Easily find your bookmarks using a fuzzy search interface with alias and path displayed together.
 - **Directory Navigation**: Open directories in terminal or file manager directly from the command line.
 
 ## Installation
@@ -60,7 +59,7 @@ To view and manage your bookmarks:
 
 1. Run `rtg` without any arguments
 2. Select "View bookmarks" from the menu
-3. View the table showing all bookmarks with their aliases and paths
+3. Browse your bookmarks with fuzzy search (each entry shows alias and full path)
 4. Select a bookmark to perform actions:
    - **Open in Terminal**: Navigate to the directory (cd)
    - **Open in File Manager**: Open the directory in your system's file manager
@@ -81,13 +80,11 @@ rtg
 # Later, from anywhere
 rtg
 # Select: View bookmarks
-# See table:
-# ┌────────┬─────────────────────────┐
-# │ Alias  │ Path                    │
-# ├────────┼─────────────────────────┤
-# │ myproj │ /home/user/projects/... │
-# └────────┴─────────────────────────┘
-# Select: myproj
+# You'll see fuzzy searchable list:
+#   myproj -> /home/user/projects/myproject
+#   docs -> /home/user/documents
+#   ...
+# Select: myproj -> /home/user/projects/myproject
 # Select: Open in Terminal
 # Now you're in ~/projects/myproject
 ```

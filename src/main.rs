@@ -11,7 +11,6 @@ use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use postcard::{from_bytes, to_allocvec};
 use dialoguer::{theme::ColorfulTheme, Input, FuzzySelect};
-use comfy_table::{Table, ContentArrangement, presets::UTF8_FULL};
 
 const ROOT: &str = "$HOME/.rustag/";
 const BOOKMARKFILE: &str = "bookmarks";
@@ -133,14 +132,21 @@ fn view_bookmarks(
         return Ok(());
     }
 
-    // Display bookmarks table
-    display_bookmarks_table(bookmark_list);
+    // Create formatted menu items with alias and path
+    let aliases = bookmark_list.get_aliases();
+    let menu_items: Vec<String> = aliases
+        .iter()
+        .filter_map(|alias| {
+            bookmark_list.get_bookmark(alias).map(|bookmark| {
+                format!("{} -> {}", alias, bookmark.folder_path)
+            })
+        })
+        .collect();
 
     // Select bookmark
-    let aliases = bookmark_list.get_aliases();
     let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
         .with_prompt("Select bookmark")
-        .items(aliases)
+        .items(&menu_items)
         .default(0)
         .interact()?;
 
@@ -235,22 +241,6 @@ fn view_bookmarks(
     }
 
     Ok(())
-}
-
-fn display_bookmarks_table(bookmark_list: &BookmarkList) {
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["Alias", "Path"]);
-
-    for alias in bookmark_list.get_aliases() {
-        if let Some(bookmark) = bookmark_list.get_bookmark(alias) {
-            table.add_row(vec![alias, &bookmark.folder_path]);
-        }
-    }
-
-    println!("\n{}\n", table);
 }
 
 fn save_bookmarks(
