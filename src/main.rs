@@ -1,185 +1,61 @@
 use core::ops::Deref;
 use std::{
-    env::args,
+    env::current_dir,
     result::Result,
     collections::HashMap,
     error::Error,
+    path::Path,
 };
 use shellexpand::env;
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
 use postcard::{from_bytes, to_allocvec};
 use dialoguer::{theme::ColorfulTheme, Input, FuzzySelect};
+use comfy_table::{Table, ContentArrangement, presets::UTF8_FULL};
 
 const ROOT: &str = "$HOME/.rustag/";
-const TAGFILE: &str = "tagfile";
+const BOOKMARKFILE: &str = "bookmarks";
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Check if root directory exists
     let root = env(ROOT).unwrap();
-    let root_dir = std::path::Path::new(root.as_ref());
-    let tagfile_dir = root_dir.join(TAGFILE);
+    let root_dir = Path::new(root.as_ref());
+    let bookmarkfile_path = root_dir.join(BOOKMARKFILE);
 
+    // Create directory if it doesn't exist
     if !root_dir.exists() {
         std::fs::create_dir_all(root_dir)?;
-
-        // Create default AGTagList
-        let tag_list = AGTagList::default();
-
-        // Write default AGTagList
-        let write_buffer = to_allocvec(&tag_list)?;
-        std::fs::write(tagfile_dir.as_path(), write_buffer)?;
     }
 
-    // Read taglist
-    let read_buffer = std::fs::read(tagfile_dir.as_path())?;
-    let mut tag_list: AGTagList = from_bytes(read_buffer.deref())?;
+    // Create default bookmarks file if it doesn't exist
+    if !bookmarkfile_path.exists() {
+        let bookmark_list = BookmarkList::default();
+        let write_buffer = to_allocvec(&bookmark_list)?;
+        std::fs::write(bookmarkfile_path.as_path(), write_buffer)?;
+    }
 
-    // Receive file name
-    let file_name = args().nth(1);
+    // Read bookmark list
+    let read_buffer = std::fs::read(bookmarkfile_path.as_path())?;
+    let mut bookmark_list: BookmarkList = from_bytes(read_buffer.deref())?;
 
-    // Check if file name is provided
-    match file_name {
-        None => {
-            // No file name -> Choose tag -> Choose file to open
-            // 0. Choose tag or remove tag
-            let action = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("Choose tag or remove tag")
-                .items(&["Choose tag", "Remove tag"])
-                .default(0)
-                .interact()?;
+    // Main menu
+    let menu_items = vec!["Add bookmark", "View bookmarks"];
+    let menu_selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .with_prompt("Select menu")
+        .items(&menu_items)
+        .default(0)
+        .interact()?;
 
-            // 1. Choose tag
-            let tags = tag_list.get_tags();
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("Choose tag")
-                .items(tags)
-                .default(0)
-                .interact()?;
-            let tag = &tags[selection];
-
-            // 1.1. Remove tag
-            if action == 1 {
-                let mut tag_list = tag_list.clone();
-                tag_list.remove_tag(tag);
-
-                // Dump
-                let write_buffer = to_allocvec(&tag_list)?;
-                std::fs::write(tagfile_dir.as_path(), write_buffer)?;
-
-                println!("{}", env("$PWD").unwrap());
-                return Ok(());
-            }
-
-            // 2. Choose file
-            let file = if let Some(files) = tag_list.get_files(tag) {
-                let file_names = files.iter().map(|file| file.get_file_name()).collect::<Vec<&str>>();
-                let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Choose file")
-                    .items(&file_names)
-                    .default(0)
-                    .interact()?;
-                &files[selection]
-            } else {
-                panic!("Error: No files found in tag {}", tag);
-            };
-
-            // 3. Open file or open Path or remove file in tag
-            let file_path = std::path::Path::new(file.get_file_path());
-            if file_path.exists() {
-                let (file_parent_dir, options, is_file) = if file_path.is_file() {
-                    (file_path.parent().unwrap(), vec!["Open path in Terminal", "Open path in File Manager", "Open file", "Remove file in tag"], true)
-                } else {
-                    (file_path, vec!["Open path in Terminal", "Open path in File Manager", "Remove file in tag"], false)  
-                };
-                let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Choose action")
-                    .items(&options)
-                    .default(0)
-                    .interact()?;
-
-                match selection {
-                    0 => {
-                        // Print path
-                        println!("{}", file_parent_dir.display());
-                    }
-                    1 => {
-                        // Open path in File Manager
-                        std::process::Command::new("xdg-open")
-                            .arg(file_parent_dir)
-                            .spawn()?;
-                        println!("{}", env("$PWD").unwrap());
-                    }
-                    2 => {
-                        if is_file {
-                            std::process::Command::new("xdg-open").arg(file_path).spawn()?;
-                        } else {
-                            let mut tag_list = tag_list.clone();
-                            tag_list.remove_file(tag, file.get_file_name());
-                            let write_buffer = to_allocvec(&tag_list)?;
-                            std::fs::write(tagfile_dir.as_path(), write_buffer)?;
-                        }
-                        println!("{}", env("$PWD").unwrap());
-                    }
-                    3 => {
-                        let mut tag_list = tag_list.clone();
-                        tag_list.remove_file(tag, file.get_file_name());
-                        let write_buffer = to_allocvec(&tag_list)?;
-                        std::fs::write(tagfile_dir.as_path(), write_buffer)?;
-                    }
-                    _ => {
-                        panic!("Error: Invalid selection");
-                    }
-                }
-            } else {
-                panic!("Error: {} is not found", file.get_file_name());
-            }
+    match menu_selection {
+        0 => {
+            // Add bookmark
+            add_bookmark(&mut bookmark_list, &bookmarkfile_path)?;
         }
-
-        Some(name) => {
-            // Check if file exists
-            let file_path_str = format!("{}/{}", env("$PWD").unwrap(), name);
-            let file_path = std::path::Path::new(&file_path_str);
-            if !file_path.exists() {
-                panic!("Error: {} is not found", name);
-            }
-
-            // Create AGFile
-            let mut file = AGFile {
-                file_name: name.to_string(),
-                file_path: file_path_str.clone(),
-                created_at: Utc::now(),
-                tags: vec![],
-            };
-
-            // Choose tags
-            let mut options = tag_list.get_tags().clone();
-            options.push("Create new tag".to_string());
-
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("Choose tags")
-                .items(&options)
-                .default(0)
-                .interact()?;
-
-            if selection == options.len() - 1 {
-                // Create new tag
-                let tag_name: String = Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Enter tag name")
-                    .interact()?;
-
-                file.tags.push(tag_name.clone());
-            } else {
-                file.tags.push(options[selection].clone());
-            }
-
-            // Insert file
-            tag_list.insert_file(file);
-
-            // Write taglist
-            let write_buffer = to_allocvec(&tag_list)?;
-            std::fs::write(tagfile_dir.as_path(), write_buffer)?;
-
+        1 => {
+            // View bookmarks
+            view_bookmarks(&mut bookmark_list, &bookmarkfile_path)?;
+        }
+        _ => {
             println!("{}", env("$PWD").unwrap());
         }
     }
@@ -187,90 +63,307 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AGFile {
-    file_name: String,
-    file_path: String,
-    created_at: DateTime<Utc>,
-    tags: Vec<String>,
-}
+fn add_bookmark(
+    bookmark_list: &mut BookmarkList,
+    bookmarkfile_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    // Get current directory
+    let current_dir = current_dir()?;
 
-impl AGFile {
-    pub fn get_file_name(&self) -> &str {
-        &self.file_name
+    // Validate that current directory exists and is a directory
+    if !current_dir.exists() {
+        return Err("Current directory does not exist".into());
+    }
+    if !current_dir.is_dir() {
+        return Err("Current path is not a directory".into());
     }
 
-    pub fn get_file_path(&self) -> &str {
-        &self.file_path
+    // Canonicalize the path
+    let canonical_path = std::fs::canonicalize(&current_dir)?;
+    let folder_path = canonical_path
+        .to_str()
+        .ok_or("Path contains invalid UTF-8 characters")?
+        .to_string();
+
+    // Input alias with validation
+    let alias: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Enter alias")
+        .validate_with(|input: &String| -> Result<(), &str> {
+            let trimmed = input.trim();
+            if trimmed.is_empty() {
+                Err("Alias cannot be empty")
+            } else if trimmed.contains('/') || trimmed.contains('\\') {
+                Err("Alias cannot contain path separators")
+            } else if bookmark_list.exists(trimmed) {
+                Err("Alias already exists")
+            } else {
+                Ok(())
+            }
+        })
+        .interact()?;
+
+    // Create bookmark
+    let bookmark = Bookmark {
+        alias: alias.trim().to_string(),
+        folder_path: folder_path.clone(),
+        created_at: Utc::now(),
+        last_accessed: None,
+    };
+
+    // Insert bookmark
+    bookmark_list.insert_bookmark(bookmark)?;
+
+    // Save bookmarks
+    save_bookmarks(bookmark_list, bookmarkfile_path)?;
+
+    println!("Bookmark '{}' added: {}", alias.trim(), folder_path);
+    println!("{}", env("$PWD").unwrap());
+
+    Ok(())
+}
+
+fn view_bookmarks(
+    bookmark_list: &mut BookmarkList,
+    bookmarkfile_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    // Check if there are any bookmarks
+    if bookmark_list.is_empty() {
+        println!("No bookmarks found. Please add a bookmark first.");
+        println!("{}", env("$PWD").unwrap());
+        return Ok(());
+    }
+
+    // Display bookmarks table
+    display_bookmarks_table(bookmark_list);
+
+    // Select bookmark
+    let aliases = bookmark_list.get_aliases();
+    let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .with_prompt("Select bookmark")
+        .items(aliases)
+        .default(0)
+        .interact()?;
+
+    let selected_alias = &aliases[selection].clone();
+    let bookmark = bookmark_list
+        .get_bookmark(selected_alias)
+        .ok_or("Bookmark not found")?
+        .clone();
+
+    // Check if bookmark path still exists
+    let bookmark_path = Path::new(&bookmark.folder_path);
+    if !bookmark_path.exists() {
+        println!("Warning: Path no longer exists: {}", bookmark.folder_path);
+        println!("Do you want to remove this bookmark?");
+
+        let confirm = FuzzySelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Confirm deletion")
+            .items(&["Yes", "No"])
+            .default(1)
+            .interact()?;
+
+        if confirm == 0 {
+            bookmark_list.remove_bookmark(selected_alias);
+            save_bookmarks(bookmark_list, bookmarkfile_path)?;
+            println!("Bookmark '{}' removed", selected_alias);
+        }
+        println!("{}", env("$PWD").unwrap());
+        return Ok(());
+    }
+
+    // Action menu
+    let actions = vec![
+        "Open in Terminal",
+        "Open in File Manager",
+        "Edit alias",
+        "Remove bookmark",
+    ];
+
+    let action_selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        .with_prompt("Select action")
+        .items(&actions)
+        .default(0)
+        .interact()?;
+
+    match action_selection {
+        0 => {
+            // Open in Terminal (print path for rtg wrapper to cd)
+            bookmark_list.update_last_accessed(selected_alias);
+            save_bookmarks(bookmark_list, bookmarkfile_path)?;
+            println!("{}", bookmark.folder_path);
+        }
+        1 => {
+            // Open in File Manager
+            std::process::Command::new("xdg-open")
+                .arg(&bookmark.folder_path)
+                .spawn()?;
+            println!("{}", env("$PWD").unwrap());
+        }
+        2 => {
+            // Edit alias
+            let new_alias: String = Input::with_theme(&ColorfulTheme::default())
+                .with_prompt("Enter new alias")
+                .validate_with(|input: &String| -> Result<(), &str> {
+                    let trimmed = input.trim();
+                    if trimmed.is_empty() {
+                        Err("Alias cannot be empty")
+                    } else if trimmed.contains('/') || trimmed.contains('\\') {
+                        Err("Alias cannot contain path separators")
+                    } else if bookmark_list.exists(trimmed) && trimmed != selected_alias {
+                        Err("Alias already exists")
+                    } else {
+                        Ok(())
+                    }
+                })
+                .interact()?;
+
+            bookmark_list.update_alias(selected_alias, new_alias.trim())?;
+            save_bookmarks(bookmark_list, bookmarkfile_path)?;
+            println!("Alias changed from '{}' to '{}'", selected_alias, new_alias.trim());
+            println!("{}", env("$PWD").unwrap());
+        }
+        3 => {
+            // Remove bookmark
+            bookmark_list.remove_bookmark(selected_alias);
+            save_bookmarks(bookmark_list, bookmarkfile_path)?;
+            println!("Bookmark '{}' removed", selected_alias);
+            println!("{}", env("$PWD").unwrap());
+        }
+        _ => {
+            println!("{}", env("$PWD").unwrap());
+        }
+    }
+
+    Ok(())
+}
+
+fn display_bookmarks_table(bookmark_list: &BookmarkList) {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec!["Alias", "Path"]);
+
+    for alias in bookmark_list.get_aliases() {
+        if let Some(bookmark) = bookmark_list.get_bookmark(alias) {
+            table.add_row(vec![alias, &bookmark.folder_path]);
+        }
+    }
+
+    println!("\n{}\n", table);
+}
+
+fn save_bookmarks(
+    bookmark_list: &BookmarkList,
+    bookmarkfile_path: &Path,
+) -> Result<(), Box<dyn Error>> {
+    let write_buffer = to_allocvec(bookmark_list)?;
+    std::fs::write(bookmarkfile_path, write_buffer)?;
+    Ok(())
+}
+
+// Data Structures
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Bookmark {
+    alias: String,
+    folder_path: String,
+    created_at: DateTime<Utc>,
+    last_accessed: Option<DateTime<Utc>>,
+}
+
+impl Bookmark {
+    pub fn get_alias(&self) -> &str {
+        &self.alias
+    }
+
+    pub fn get_folder_path(&self) -> &str {
+        &self.folder_path
     }
 
     pub fn get_created_at(&self) -> &DateTime<Utc> {
         &self.created_at
     }
 
-    pub fn get_tags(&self) -> &Vec<String> {
-        &self.tags
+    pub fn get_last_accessed(&self) -> &Option<DateTime<Utc>> {
+        &self.last_accessed
     }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AGTag {
-    tag_name: String,
-    files: Vec<AGFile>,
+pub struct BookmarkList {
+    bookmarks: HashMap<String, Bookmark>,
+    aliases: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct AGTagList {
-    tags: Vec<String>,
-    tag_map: HashMap<String, AGTag>,
-}
-
-impl AGTagList {
-    pub fn get_tags(&self) -> &Vec<String> {
-        &self.tags
+impl BookmarkList {
+    pub fn get_aliases(&self) -> &Vec<String> {
+        &self.aliases
     }
 
-    pub fn get_files(&self, tag: &str) -> Option<&Vec<AGFile>> {
-        self.tag_map.get(tag).map(|tag| &tag.files)
+    pub fn get_bookmark(&self, alias: &str) -> Option<&Bookmark> {
+        self.bookmarks.get(alias)
     }
 
-    pub fn get_mut_files(&mut self, tag: &str) -> Option<&mut Vec<AGFile>> {
-        self.tag_map.get_mut(tag).map(|tag| &mut tag.files)
+    pub fn get_bookmark_mut(&mut self, alias: &str) -> Option<&mut Bookmark> {
+        self.bookmarks.get_mut(alias)
     }
 
-    pub fn insert_file(&mut self, file: AGFile) {
-        for tag in file.tags.iter() {
-            let is_new_tag = self.tag_map.get(tag).is_none();
-            let files = &mut self.tag_map
-                .entry(tag.to_string())
-                .or_insert(AGTag {
-                    tag_name: tag.to_string(),
-                    files: vec![],
-                })
-                .files;
-            if files.iter().any(|f| f.file_name == file.file_name) {
-                println!("{} already exists in {}", file.file_name, tag);
-                continue
-            } else {
-                files.push(file.clone());
-                if is_new_tag {
-                    self.tags.push(tag.to_string());
-                }
+    pub fn insert_bookmark(&mut self, bookmark: Bookmark) -> Result<(), String> {
+        if self.bookmarks.contains_key(&bookmark.alias) {
+            return Err(format!("Alias '{}' already exists", bookmark.alias));
+        }
+
+        self.aliases.push(bookmark.alias.clone());
+        self.bookmarks.insert(bookmark.alias.clone(), bookmark);
+        self.sort_aliases();
+        Ok(())
+    }
+
+    pub fn remove_bookmark(&mut self, alias: &str) {
+        self.bookmarks.remove(alias);
+        self.aliases.retain(|a| a != alias);
+    }
+
+    pub fn update_alias(&mut self, old_alias: &str, new_alias: &str) -> Result<(), String> {
+        if old_alias == new_alias {
+            return Ok(());
+        }
+
+        if self.bookmarks.contains_key(new_alias) {
+            return Err(format!("Alias '{}' already exists", new_alias));
+        }
+
+        if let Some(mut bookmark) = self.bookmarks.remove(old_alias) {
+            bookmark.alias = new_alias.to_string();
+            self.bookmarks.insert(new_alias.to_string(), bookmark);
+
+            // Update aliases vector
+            if let Some(pos) = self.aliases.iter().position(|a| a == old_alias) {
+                self.aliases[pos] = new_alias.to_string();
             }
+            self.sort_aliases();
+            Ok(())
+        } else {
+            Err(format!("Alias '{}' not found", old_alias))
         }
     }
 
-    pub fn remove_tag(&mut self, tag: &str) {
-        self.tags.retain(|t| t != tag);
-        self.tag_map.remove(tag);
+    pub fn update_last_accessed(&mut self, alias: &str) {
+        if let Some(bookmark) = self.bookmarks.get_mut(alias) {
+            bookmark.last_accessed = Some(Utc::now());
+        }
     }
 
-    pub fn remove_file(&mut self, tag: &str, file_name: &str) {
-        if let Some(files) = self.get_mut_files(tag) {
-            files.retain(|f| f.file_name != file_name);
-            if files.is_empty() {
-                self.remove_tag(tag);
-            }
-        }
+    pub fn exists(&self, alias: &str) -> bool {
+        self.bookmarks.contains_key(alias)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bookmarks.is_empty()
+    }
+
+    fn sort_aliases(&mut self) {
+        self.aliases.sort();
     }
 }

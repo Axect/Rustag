@@ -1,19 +1,20 @@
 [package]
 name = "rustag"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Axect <ax2ct@outlook.com>"]
-description = "Rustag, a Rust-built command-line tool, simplifies file organization through custom tagging and swift fuzzy search, enhancing file management directly from your terminal."
+description = "Rustag, a Rust-built command-line tool for bookmarking directories with custom aliases and fuzzy search."
 license = "MIT OR Apache-2.0"
 categories = ["command-line-utilities"]
 repository = "https://github.com/Axect/Rustag"
 readme = "README.md"
-keywords = ["cli", "tag", "tagging", "fuzzy", "fuzzy-search"]
+keywords = ["cli", "bookmark", "directory", "fuzzy", "fuzzy-search"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 chrono = { version = "0.4.31", features = ["serde"] }
+comfy-table = "7.1"
 dialoguer = { version = "0.11.0", features = ["fuzzy-select"] }
 postcard = { version = "1.0.8", features = ["alloc"] }
 serde = { version = "1.0.193", features = ["serde_derive"] }

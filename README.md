@@ -1,12 +1,13 @@
 # Rustag
 
-Rustag is a Rust-based command-line tool for organizing and tagging files on your system. It allows users to tag files with custom labels and retrieve them easily using a fuzzy search interface.
+Rustag is a Rust-based command-line tool for bookmarking directories on your system. It allows users to assign custom aliases to directories and navigate to them easily using a fuzzy search interface.
 
 ## Features
 
-- **File Tagging**: Assign custom tags to your files for easy organization.
-- **Fuzzy Search**: Easily find your files using a fuzzy search interface.
-- **File Management**: Open files or their containing folders directly from the command line.
+- **Directory Bookmarking**: Assign custom aliases to your directories for easy organization.
+- **Fuzzy Search**: Easily find your bookmarks using a fuzzy search interface.
+- **Table Display**: View all bookmarks in a clean table format showing aliases and paths.
+- **Directory Navigation**: Open directories in terminal or file manager directly from the command line.
 
 ## Installation
 
@@ -22,7 +23,7 @@ And for additional features, add the following to your `~/.bashrc` or `~/.zshrc`
 ```bash
 rtg() {
   RUSTAG=$(rustag $@)
-  
+
   # RUSTAG contains "Error" then just print else cd $(RUSTAG)
   if [[ $RUSTAG == *"Error"* ]]; then
     echo $RUSTAG
@@ -36,36 +37,83 @@ Then run `rtg` to get started.
 
 ## Setup
 
-Upon first run, Rustag will create a `.rustag` directory in your home folder to store its data. This includes a `tagfile` that maintains the tag information.
+Upon first run, Rustag will create a `.rustag` directory in your home folder to store its data. This includes a `bookmarks` file that maintains the bookmark information.
 
 ## Usage
 
-### Tagging a File
+### Adding a Bookmark
 
-To tag a file, run Rustag with the file name as an argument:
+To bookmark the current directory, run Rustag without arguments and select "Add bookmark":
 
 ```bash
-rtg filename.ext
+rtg
 ```
 
-Follow the prompts to select existing tags or create a new one.
+Follow the prompts to:
+1. Select "Add bookmark" from the menu
+2. Enter a custom alias for the current directory
 
-### Retrieving Files
+### Viewing and Managing Bookmarks
 
-To view and open files associated with a tag:
+To view and manage your bookmarks:
 
-1. Run Rustag without any arguments.
-2. Select a tag from the list.
-3. Choose a file to open or a related action.
+1. Run `rtg` without any arguments
+2. Select "View bookmarks" from the menu
+3. View the table showing all bookmarks with their aliases and paths
+4. Select a bookmark to perform actions:
+   - **Open in Terminal**: Navigate to the directory (cd)
+   - **Open in File Manager**: Open the directory in your system's file manager
+   - **Edit alias**: Change the alias of the bookmark
+   - **Remove bookmark**: Delete the bookmark
+
+### Example Workflow
+
+```bash
+# Navigate to a project directory
+cd ~/projects/myproject
+
+# Add a bookmark
+rtg
+# Select: Add bookmark
+# Enter alias: myproj
+
+# Later, from anywhere
+rtg
+# Select: View bookmarks
+# See table:
+# ┌────────┬─────────────────────────┐
+# │ Alias  │ Path                    │
+# ├────────┼─────────────────────────┤
+# │ myproj │ /home/user/projects/... │
+# └────────┴─────────────────────────┘
+# Select: myproj
+# Select: Open in Terminal
+# Now you're in ~/projects/myproject
+```
 
 ## Data Structure
 
-Rustag uses several custom data structures:
+Rustag uses two custom data structures:
 
-- `AGFile`: Represents a tagged file, including metadata such as creation date and file path.
-- `AGTag`: Represents a tag, associated with multiple `AGFile` instances.
-- `AGTagList`: Manages the collection of tags and their associated files.
+- **`Bookmark`**: Represents a bookmarked directory, including:
+  - `alias`: User-defined alias for the directory
+  - `folder_path`: Absolute path to the directory
+  - `created_at`: Timestamp when the bookmark was created
+  - `last_accessed`: Timestamp when the bookmark was last accessed (optional)
+
+- **`BookmarkList`**: Manages the collection of bookmarks using:
+  - `bookmarks`: HashMap mapping aliases to Bookmark instances for O(1) lookup
+  - `aliases`: Sorted vector of aliases for display purposes
 
 ## Contributing
 
 Contributions are welcome! Feel free to open issues or submit pull requests.
+
+## License
+
+This project is licensed under either of:
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
