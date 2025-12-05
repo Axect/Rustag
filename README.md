@@ -17,7 +17,9 @@ Then run the following command:
 cargo install rustag
 ```
 
-And for additional features, add the following to your `~/.bashrc` or `~/.zshrc`:
+And for additional features, add the following to your shell configuration file:
+
+**For Bash/Zsh** (`~/.bashrc` or `~/.zshrc`):
 
 ```bash
 rtg() {
@@ -31,6 +33,22 @@ rtg() {
     echo "$output"
   fi
 }
+```
+
+**For Fish** (`~/.config/fish/config.fish`):
+
+```fish
+function rtg
+  set -l output (rustag $argv)
+  set -l last_line (echo $output | tail -n 1)
+
+  # Check if the last line is a valid directory path
+  if test -d "$last_line"
+    cd "$last_line"
+  else
+    echo "$output"
+  end
+end
 ```
 
 Then run `rtg` to get started.
