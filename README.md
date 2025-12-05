@@ -22,13 +22,14 @@ And for additional features, add the following to your `~/.bashrc` or `~/.zshrc`
 
 ```bash
 rtg() {
-  RUSTAG=$(rustag $@)
+  local output=$(rustag "$@")
+  local last_line=$(echo "$output" | tail -n 1)
 
-  # RUSTAG contains "Error" then just print else cd $(RUSTAG)
-  if [[ $RUSTAG == *"Error"* ]]; then
-    echo $RUSTAG
+  # Check if the last line is a valid directory path
+  if [[ -d "$last_line" ]]; then
+    cd "$last_line"
   else
-    cd $RUSTAG
+    echo "$output"
   fi
 }
 ```
